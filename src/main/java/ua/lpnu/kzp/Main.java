@@ -8,28 +8,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Головний клас програми для обробки записів розкладу занять.
- */
 public final class Main {
 
-    /* Забороняє створення екземплярів службового класу. */
     private Main() {
     }
 
-    /**
-     * Точка входу до програми. Читає файл, перевіряє записи та формує звіт.
-     *
-     * @param args аргументи командного рядка
-     */
     public static void main(String[] args) {
-        // Використовуємо Path для кросплатформності (працює на Windows, macOS, Ubuntu)
+        // Задаємо папку і файл окремо, щоб уникнути виклику getParent()
         Path input = Path.of("data", "input.csv");
-        Path output = Path.of("out", "report.txt");
+        Path outDir = Path.of("out"); 
+        Path output = outDir.resolve("report.txt");
 
         List<String> lines;
         try {
-            // Читаємо файл із явним кодуванням UTF-8
             lines = Files.readAllLines(input, StandardCharsets.UTF_8);
         } catch (IOException e) {
             System.out.println("Помилка читання вхідного файлу: " + e.getMessage());
@@ -43,42 +34,37 @@ public final class Main {
         int totalDuration = 0;
 
         for (int index = 0; index < lines.size(); index++) {
-            // Розділяємо рядок крапкою з комою, зберігаючи порожні поля (-1)
             String[] fields = lines.get(index).split(";", -1);
 
             if (fields.length != 5) {
-                errors.add("Рядок %d: очікується 5 полів".formatted(index + 1));
+                errors.add(String.format(Locale.ROOT, "Рядок %d: очікується 5 полів", index + 1));
                 continue;
             }
 
-            // Перевіряємо, чи не порожні текстові обов'язкові поля (предмет, викладач, день)
             if (fields[0].isBlank() || fields[1].isBlank() || fields[2].isBlank()) {
-                errors.add("Рядок %d: порожнє текстове поле".formatted(index + 1));
+                errors.add(String.format(Locale.ROOT, "Рядок %d: порожнє текстове поле", index + 1));
                 continue;
             }
 
             try {
-                // Перетворюємо числові поля
                 int room = Integer.parseInt(fields[3].trim());
                 int duration = Integer.parseInt(fields[4].trim());
 
                 if (room < 0 || duration < 0) {
-                    errors.add("Рядок %d: від'ємне числове значення".formatted(index + 1));
+                    errors.add(String.format(Locale.ROOT, "Рядок %d: від'ємне числове значення", index + 1));
                     continue;
                 }
 
-                // Додаємо дані до статистики лише для коректних записів
                 validCount++;
                 minRoom = Math.min(minRoom, room);
                 maxDuration = Math.max(maxDuration, duration);
                 totalDuration += duration;
 
             } catch (NumberFormatException exception) {
-                errors.add("Рядок %d: числове поле має помилковий формат".formatted(index + 1));
+                errors.add(String.format(Locale.ROOT, "Рядок %d: числове поле має помилковий формат", index + 1));
             }
         }
 
-        // Формуємо текст звіту
         StringBuilder reportBuilder = new StringBuilder();
         reportBuilder.append(String.format(Locale.ROOT, "Коректних записів: %d%n", validCount));
         
@@ -94,13 +80,11 @@ public final class Main {
         }
 
         String finalReport = reportBuilder.toString();
-        
-        // Виводимо в консоль
         System.out.println(finalReport);
 
-        // Записуємо у файл
         try {
-            Files.createDirectories(output.getParent());
+            // Спокійно створюємо папку, бо outDir гарантовано не null
+            Files.createDirectories(outDir);
             Files.writeString(output, finalReport, StandardCharsets.UTF_8);
         } catch (IOException e) {
             System.out.println("Помилка запису файлу звіту: " + e.getMessage());
