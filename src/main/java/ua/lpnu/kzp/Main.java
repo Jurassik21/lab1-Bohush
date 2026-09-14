@@ -14,6 +14,11 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        // Обробка аргументу --version
+        if (args.length > 0 && args[0].equals("--version")) {
+            System.out.println("v1.0.0");
+            return;
+        }
         // Задаємо папку і файл окремо, щоб уникнути виклику getParent()
         Path input = Path.of("data", "input.csv");
         Path outDir = Path.of("out"); 
