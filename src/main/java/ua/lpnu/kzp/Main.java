@@ -8,24 +8,54 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Головний клас програми для обробки записів розкладу занять.
+ */
 public final class Main {
 
+    /* Забороняє створення екземплярів службового класу. */
     private Main() {
     }
 
+    /**
+     * Точка входу до програми. Читає файл, перевіряє записи та формує звіт.
+     * Підтримує аргументи командного рядка: --help, --version, --input, --output.
+     *
+     * @param args аргументи командного рядка
+     */
     public static void main(String[] args) {
-        // Обробка аргументу --version
-        if (args.length > 0 && args[0].equals("--version")) {
-            System.out.println("v1.0.0");
-            return;
-        }
-        // Задаємо папку і файл окремо, щоб уникнути виклику getParent()
         Path input = Path.of("data", "input.csv");
-        Path outDir = Path.of("out"); 
+        Path outDir = Path.of("out");
         Path output = outDir.resolve("report.txt");
+
+        // Обробка аргументів командного рядка
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("--help")) {
+                System.out.println("Використання: java -jar target/lab01-bohush-1.0.0.jar [опції]");
+                System.out.println("Опції:");
+                System.out.println("  --help             Показати цю довідку");
+                System.out.println("  --version          Показати версію програми");
+                System.out.println("  --input <шлях>     Шлях до вхідного файлу CSV");
+                System.out.println("  --output <шлях>    Шлях до вихідного файлу звіту");
+                return;
+            } else if (args[i].equals("--version")) {
+                System.out.println("v1.0.0");
+                return;
+            } else if (args[i].equals("--input") && i + 1 < args.length) {
+                input = Path.of(args[++i]);
+            } else if (args[i].equals("--output") && i + 1 < args.length) {
+                output = Path.of(args[++i]);
+                if (output.getParent() != null) {
+                    outDir = output.getParent(); 
+                } else {
+                    outDir = Path.of("."); // Якщо вказано лише ім'я файлу без папки
+                }
+            }
+        }
 
         List<String> lines;
         try {
+            // Читаємо файл із явним кодуванням UTF-8
             lines = Files.readAllLines(input, StandardCharsets.UTF_8);
         } catch (IOException e) {
             System.out.println("Помилка читання вхідного файлу: " + e.getMessage());
@@ -88,8 +118,10 @@ public final class Main {
         System.out.println(finalReport);
 
         try {
-            // Спокійно створюємо папку, бо outDir гарантовано не null
-            Files.createDirectories(outDir);
+            // Безпечне створення директорії для SpotBugs
+            if (!Files.exists(outDir)) {
+                Files.createDirectories(outDir);
+            }
             Files.writeString(output, finalReport, StandardCharsets.UTF_8);
         } catch (IOException e) {
             System.out.println("Помилка запису файлу звіту: " + e.getMessage());
