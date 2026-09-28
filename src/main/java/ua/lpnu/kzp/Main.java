@@ -46,7 +46,7 @@ public final class Main {
             } else if (args[i].equals("--output") && i + 1 < args.length) {
                 output = Path.of(args[++i]);
                 if (output.getParent() != null) {
-                    outDir = output.getParent(); 
+                    outDir = output.getParent();
                 } else {
                     outDir = Path.of("."); // Якщо вказано лише ім'я файлу без папки
                 }
@@ -69,46 +69,38 @@ public final class Main {
         int totalDuration = 0;
 
         for (int index = 0; index < lines.size(); index++) {
-            String[] fields = lines.get(index).split(";", -1);
-
-            if (fields.length != 5) {
-                errors.add(String.format(Locale.ROOT, "Рядок %d: очікується 5 полів", index + 1));
-                continue;
-            }
-
-            if (fields[0].isBlank() || fields[1].isBlank() || fields[2].isBlank()) {
-                errors.add(String.format(Locale.ROOT, "Рядок %d: порожнє текстове поле", index + 1));
-                continue;
-            }
-
             try {
-                int room = Integer.parseInt(fields[3].trim());
-                int duration = Integer.parseInt(fields[4].trim());
-
-                if (room < 0 || duration < 0) {
-                    errors.add(String.format(Locale.ROOT, "Рядок %d: від'ємне числове значення", index + 1));
-                    continue;
-                }
-
+                // Вся логіка розбору та валідації тепер інкапсульована у класі Lesson
+                Lesson lesson = Lesson.fromCsv(lines.get(index));
+                
                 validCount++;
-                minRoom = Math.min(minRoom, room);
-                maxDuration = Math.max(maxDuration, duration);
-                totalDuration += duration;
-
-            } catch (NumberFormatException exception) {
-                errors.add(String.format(Locale.ROOT, "Рядок %d: числове поле має помилковий формат", index + 1));
+                minRoom = Math.min(minRoom, lesson.getRoom());
+                maxDuration = Math.max(maxDuration, lesson.getDurationMinutes());
+                totalDuration += lesson.getDurationMinutes();
+                
+            } catch (IllegalArgumentException exception) {
+                // Перехоплюємо помилку та зберігаємо оригінальний номер рядка
+                errors.add(String.format(Locale.ROOT, "Рядок %d: %s", index + 1, exception.getMessage()));
             }
         }
+
+        // Упаковуємо фінальні дані у незмінний record RoomDuration
+        RoomDuration summary = new RoomDuration(
+            validCount,
+            validCount == 0 ? 0 : minRoom,
+            maxDuration,
+            totalDuration
+        );
 
         StringBuilder reportBuilder = new StringBuilder();
-        reportBuilder.append(String.format(Locale.ROOT, "Коректних записів: %d%n", validCount));
-        
-        if (validCount > 0) {
-            reportBuilder.append(String.format(Locale.ROOT, "Найменший номер аудиторії: %d%n", minRoom));
-            reportBuilder.append(String.format(Locale.ROOT, "Найдовше заняття: %d хв%n", maxDuration));
-            reportBuilder.append(String.format(Locale.ROOT, "Сумарна тривалість: %d хв%n", totalDuration));
+        reportBuilder.append(String.format(Locale.ROOT, "Коректних записів: %d%n", summary.validCount()));
+
+        if (summary.validCount() > 0) {
+            reportBuilder.append(String.format(Locale.ROOT, "Найменший номер аудиторії: %d%n", summary.minRoom()));
+            reportBuilder.append(String.format(Locale.ROOT, "Найдовше заняття: %d хв%n", summary.maxDuration()));
+            reportBuilder.append(String.format(Locale.ROOT, "Сумарна тривалість: %d хв%n", summary.totalDuration()));
         }
-        
+
         reportBuilder.append(String.format(Locale.ROOT, "Помилок: %d%n", errors.size()));
         for (String error : errors) {
             reportBuilder.append(error).append(System.lineSeparator());
