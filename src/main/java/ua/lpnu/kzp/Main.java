@@ -1,122 +1,142 @@
 package ua.lpnu.kzp;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.IntSummaryStatistics;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Головний клас програми для обробки записів розкладу занять.
- */
 public final class Main {
+    private Main() {}
 
-    /* Забороняє створення екземплярів службового класу. */
-    private Main() {
-    }
-
-    /**
-     * Точка входу до програми. Читає файл, перевіряє записи та формує звіт.
-     * Підтримує аргументи командного рядка: --help, --version, --input, --output.
-     *
-     * @param args аргументи командного рядка
-     */
     public static void main(String[] args) {
+        System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+        
         Path input = Path.of("data", "input.csv");
-        Path outDir = Path.of("out");
-        Path output = outDir.resolve("report.txt");
+        Path exportPath = Path.of("target", "schedule-export.csv");
+        Path reportPath = Path.of("out", "report.txt");
 
-        // Обробка аргументів командного рядка
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("--help")) {
-                System.out.println("Використання: java -jar target/lab01-bohush-1.0.0.jar [опції]");
-                System.out.println("Опції:");
-                System.out.println("  --help             Показати цю довідку");
-                System.out.println("  --version          Показати версію програми");
-                System.out.println("  --input <шлях>     Шлях до вхідного файлу CSV");
-                System.out.println("  --output <шлях>    Шлях до вихідного файлу звіту");
-                return;
-            } else if (args[i].equals("--version")) {
-                System.out.println("v1.0.0");
-                return;
-            } else if (args[i].equals("--input") && i + 1 < args.length) {
-                input = Path.of(args[++i]);
-            } else if (args[i].equals("--output") && i + 1 < args.length) {
-                output = Path.of(args[++i]);
-                if (output.getParent() != null) {
-                    outDir = output.getParent();
-                } else {
-                    outDir = Path.of("."); // Якщо вказано лише ім'я файлу без папки
-                }
-            }
-        }
+        StringBuilder report = new StringBuilder();
 
         List<String> lines;
         try {
-            // Читаємо файл із явним кодуванням UTF-8
             lines = Files.readAllLines(input, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            System.out.println("Помилка читання вхідного файлу: " + e.getMessage());
+            System.out.println("Помилка читання файлу: " + e.getMessage());
             return;
         }
 
+        Repository<Lesson> repository = new Repository<>();
         List<String> errors = new ArrayList<>();
-        int validCount = 0;
-        int minRoom = Integer.MAX_VALUE;
-        int maxDuration = 0;
-        int totalDuration = 0;
 
         for (int index = 0; index < lines.size(); index++) {
             try {
-                // Вся логіка розбору та валідації тепер інкапсульована у класі Lesson
-                Lesson lesson = Lesson.fromCsv(lines.get(index));
-                
-                validCount++;
-                minRoom = Math.min(minRoom, lesson.getRoom());
-                maxDuration = Math.max(maxDuration, lesson.getDurationMinutes());
-                totalDuration += lesson.getDurationMinutes();
-                
+                repository.add(Lesson.fromCsv(lines.get(index)));
             } catch (IllegalArgumentException exception) {
-                // Перехоплюємо помилку та зберігаємо оригінальний номер рядка
                 errors.add(String.format(Locale.ROOT, "Рядок %d: %s", index + 1, exception.getMessage()));
             }
         }
 
-        // Упаковуємо фінальні дані у незмінний record RoomDuration
-        RoomDuration summary = new RoomDuration(
-            validCount,
-            validCount == 0 ? 0 : minRoom,
-            maxDuration,
-            totalDuration
-        );
+        List<Lesson> lessons = repository.all();
 
-        StringBuilder reportBuilder = new StringBuilder();
-        reportBuilder.append(String.format(Locale.ROOT, "Коректних записів: %d%n", summary.validCount()));
+        // === 1. СТАРІ ПОКАЗНИКИ ТА НОВІ ЗАПИТИ (З ЛАБ 4) ===
+        report.append("=== СТАРІ ПОКАЗНИКИ ===").append(System.lineSeparator());
+        report.append(String.format(Locale.ROOT, "Коректних записів: %d%n", lessons.size()));
+        
+        int minRoom = lessons.stream().mapToInt(Lesson::getRoom).min().orElse(0);
+        int maxDuration = lessons.stream().mapToInt(Lesson::getDurationMinutes).max().orElse(0);
+        int totalDuration = lessons.stream().mapToInt(Lesson::getDurationMinutes).sum();
+        double totalResources = lessons.stream().mapToDouble(Lesson::calculateResourceNeeds).sum();
+        int oddRoomDuration = lessons.stream().filter(l -> l.getRoom() % 2 != 0).mapToInt(Lesson::getDurationMinutes).sum();
 
-        if (summary.validCount() > 0) {
-            reportBuilder.append(String.format(Locale.ROOT, "Найменший номер аудиторії: %d%n", summary.minRoom()));
-            reportBuilder.append(String.format(Locale.ROOT, "Найдовше заняття: %d хв%n", summary.maxDuration()));
-            reportBuilder.append(String.format(Locale.ROOT, "Сумарна тривалість: %d хв%n", summary.totalDuration()));
+        report.append(String.format(Locale.ROOT, "Найменший номер аудиторії: %d%n", minRoom));
+        report.append(String.format(Locale.ROOT, "Найдовше заняття: %d хв%n", maxDuration));
+        report.append(String.format(Locale.ROOT, "Сумарна тривалість: %d хв%n", totalDuration));
+        report.append(String.format(Locale.ROOT, "Загальна потреба в ресурсах: %.2f од.%n", totalResources));
+        report.append(String.format(Locale.ROOT, "Тривалість у непарних аудиторіях: %d хв%n", oddRoomDuration));
+
+        report.append(System.lineSeparator()).append("=== НОВІ ЗАПИТИ (Stream API) ===").append(System.lineSeparator());
+        report.append(String.format(Locale.ROOT, "Заняття у день 'Понеділок': %d шт.%n", ScheduleReport.lessonsOnDay(lessons, "Понеділок").size()));
+        report.append(String.format(Locale.ROOT, "Унікальні предмети: %s%n", ScheduleReport.subjectNames(lessons)));
+        report.append(String.format(Locale.ROOT, "Кількість занять за викладачами: %s%n", ScheduleReport.lessonsCountByTeacher(lessons)));
+        
+        IntSummaryStatistics stats = ScheduleReport.durationStatistics(lessons);
+        report.append(String.format(Locale.ROOT, "Статистика тривалості (хв): %s%n", stats));
+
+        report.append("Топ-5 найдовших занять:").append(System.lineSeparator());
+        for (Lesson l : ScheduleReport.top5Lessons(lessons)) {
+            report.append(String.format(Locale.ROOT, " - %s (%d хв)%n", l.getSubject(), l.getDurationMinutes()));
         }
 
-        reportBuilder.append(String.format(Locale.ROOT, "Помилок: %d%n", errors.size()));
-        for (String error : errors) {
-            reportBuilder.append(error).append(System.lineSeparator());
-        }
+        String room114Subject = ScheduleReport.findByRoom(lessons, 114)
+                .map(Lesson::getSubject)
+                .orElse("Не знайдено");
+        report.append(String.format(Locale.ROOT, "Пошук аудиторії 114: %s%n", room114Subject));
 
-        String finalReport = reportBuilder.toString();
-        System.out.println(finalReport);
-
+        // === 2. ЕКСПОРТ ТА ROUND-TRIP (З ЛАБ 5) ===
+        report.append(System.lineSeparator()).append("=== ЗБЕРЕЖЕННЯ ТА ІМПОРТ (Лабораторна №5) ===").append(System.lineSeparator());
         try {
-            // Безпечне створення директорії для SpotBugs
-            if (!Files.exists(outDir)) {
-                Files.createDirectories(outDir);
+            // Експорт у CSV за допомогою рефлексії
+            CsvExporter.write(exportPath, Lesson.class, repository.all());
+
+            // Зчитування записаного файлу назад
+            String csvText = Files.readString(exportPath, StandardCharsets.UTF_8);
+            List<List<String>> rows = CsvParser.parseDocument(csvText);
+
+            List<Lesson> restored = rows.stream()
+                    .skip(1) // Пропускаємо заголовок
+                    .map(fields -> {
+                        try {
+                            return Lesson.fromExportedFields(fields);
+                        } catch (DataStorageException exception) {
+                            throw new IllegalStateException(exception);
+                        }
+                    })
+                    .toList();
+
+            report.append(String.format(Locale.ROOT, "Записів у сховищі: %d%n", repository.all().size()));
+            report.append(String.format(Locale.ROOT, "CSV-записів із заголовком: %d%n", rows.size()));
+            report.append(String.format(Locale.ROOT, "Відновлених об'єктів: %d%n", restored.size()));
+            report.append(String.format(Locale.ROOT, "Заголовок CSV: %s%n", String.join(",", rows.get(0))));
+            report.append(String.format(Locale.ROOT, "Round-trip успішний (списки рівні): %s%n", repository.all().equals(restored)));
+
+        } catch (DataStorageException | IOException | IllegalStateException exception) {
+            report.append("Помилка під час експорту/імпорту: ").append(exception.getMessage()).append(System.lineSeparator());
+            if (exception.getCause() != null) {
+                report.append("Причина: ").append(exception.getCause().getMessage()).append(System.lineSeparator());
             }
-            Files.writeString(output, finalReport, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            System.out.println("Помилка запису файлу звіту: " + e.getMessage());
+        }
+
+        // === 3. ПОМИЛКИ ВХІДНОГО ФАЙЛУ ===
+        if (!errors.isEmpty()) {
+            report.append(System.lineSeparator()).append("Знайдені помилки:").append(System.lineSeparator());
+            for (String error : errors) {
+                report.append(error).append(System.lineSeparator());
+            }
+        }
+
+        String fullReport = report.toString();
+
+        // 1. Виведення в консоль
+        System.out.print(fullReport);
+
+        // 2. Запис у файл out/report.txt
+        try {
+            Path parent = reportPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(reportPath, fullReport, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        } catch (IOException exception) {
+            System.out.println("Не вдалося записати файл out/report.txt: " + exception.getMessage());
         }
     }
 }
