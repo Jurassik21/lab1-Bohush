@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/kzp_lab06/__init__.py
+src/kzp_lab06/analysis.py
+src/kzp_lab06/cli.py
+src/kzp_lab06/errors.py
+src/kzp_lab06/loader.py
+src/kzp_lab06/reporting.py
+src/kzp_lab6.egg-info/PKG-INFO
+src/kzp_lab6.egg-info/SOURCES.txt
+src/kzp_lab6.egg-info/dependency_links.txt
+src/kzp_lab6.egg-info/requires.txt
+src/kzp_lab6.egg-info/top_level.txt
+tests/test_analysis.py
